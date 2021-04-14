@@ -8,6 +8,7 @@
 #include <string>
 #include <system_configuration.h>
 #include <unwind-cxx.h>
+#include <vector>
 
 /*
  Now we need a LedControl to work with.
@@ -28,7 +29,7 @@ unsigned long delaytime = 80;
 
 FontData font[255];
 
-Matrix *matrices;
+std::vector<Matrix> matrices;
 
 std::queue<FontData> input_data;
 
@@ -42,37 +43,48 @@ void addToQueue(char input) { input_data.push(font[input - 1]); }
 
 void addToQueue(int input) { input_data.push(font[input - 1]); }
 
-void setup() {
-  // Serial.begin(115200);
-  /*
-   The MAX72XX is in power-saving mode on startup,
-   we have to do a wakeup call
-   */
-  for (int i = 0; i < 4; i++) {
+void instantiateDisplays() {
+  for (int i = 0; i < DEVICES; i++) {
+    /*
+    The MAX72XX is in power-saving mode on startup,
+    we have to do a wakeup call
+    */
     lc.shutdown(i, false);
     /* Set the brightness to a medium values */
     lc.setIntensity(i, 0);
     /* and clear the display */
     lc.clearDisplay(i);
   }
+}
+
+void createMatrices() {
+  for (int i = 0; i < DEVICES + 1; i++) {
+    Matrix mat;
+    mat.setAddr(i);
+    matrices.push_back(mat);
+  }
+}
+
+void setup() {
+  instantiateDisplays();
 
   loadFont(font);
 
-  matrices = new Matrix[DEVICES + 1];
-  for (int i = 0; i < DEVICES + 1; i++) {
-    matrices[i].setAddr(i);
-  }
+  createMatrices();
 
-  addToQueue("I ");
-  addToQueue(3);
-  addToQueue(" Devan!!     ");
+  addToQueue("MSFT +12      ");
 }
 
 void writeArduinoOnMatrix() {
+  // Update the displays
   for (int i = 0; i < DEVICES; i++) {
     matrices[i].writeToDisplay(&lc);
   }
 
+  // The last matrix is a "Phantom" matrix.
+  // It's purpose is to load in the data which will
+  // be shifted into the real matrices
+  // Once it's exmpty, we'll load in the new data
   if (matrices[DEVICES].isEmpty()) {
     FontData front = input_data.front();
     matrices[DEVICES].loadValue(front);
@@ -80,6 +92,8 @@ void writeArduinoOnMatrix() {
     input_data.push(front);
   }
 
+  // Define input and output rows to pass data from one
+  // matrix to the next
   bool next_in[8] = {0, 0, 0, 0, 0, 0, 0, 0};
   bool out[8] = {0, 0, 0, 0, 0, 0, 0, 0};
   for (int i = DEVICES; i >= 0; i--) {
@@ -89,6 +103,7 @@ void writeArduinoOnMatrix() {
     }
   }
 
+  // Add a delay to slow down scrolling
   delay(delaytime);
 }
 
