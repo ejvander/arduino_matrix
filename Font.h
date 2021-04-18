@@ -2,7 +2,6 @@
 #define FONT_H
 
 #include <Arduino.h>
-#include <ArduinoSTL.h>
 
 void rotate90(uint8_t *columns, uint8_t size, uint8_t idx, uint8_t *rows);
 

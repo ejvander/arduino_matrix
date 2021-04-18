@@ -43,7 +43,7 @@ void Matrix::shiftleft(bool row_in[8], bool row_out[8]) {
       }
     }
   }
-  mSize--;
+  mSize = mSize == 0 ? 0 : mSize - 1;
 }
 
 void Matrix::writeToDisplay(LedControl *lc) {
