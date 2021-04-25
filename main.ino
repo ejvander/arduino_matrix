@@ -1,13 +1,14 @@
 // We always have to include the library
 #include "Config.h"
 #include "Font.h"
-#include "LedControl.h"
-#include "Matrix.h"
+#include "MatrixSet.h"
 
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
+#include <SPI.h>
 #include <WiFiClient.h>
 #include <queue>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -23,14 +24,13 @@
 #define CLK 14
 #define LOAD 15
 #define DEVICES 8
-LedControl lc = LedControl(DATA_IN, CLK, LOAD, DEVICES);
 
 /* we always wait a bit between updates of the display */
-unsigned long delaytime = 70;
+unsigned long delaytime = 100;
 
 FontData font[255];
 
-std::vector<Matrix> matrices;
+MatrixSet *matrixRow;
 
 std::queue<FontData> input_data;
 
@@ -46,27 +46,7 @@ void addToQueue(char input) { input_data.push(font[input - 1]); }
 
 void addToQueue(int input) { input_data.push(font[input - 1]); }
 
-void instantiateDisplays() {
-  for (int i = 0; i < DEVICES; i++) {
-    /*
-    The MAX72XX is in power-saving mode on startup,
-    we have to do a wakeup call
-    */
-    lc.shutdown(i, false);
-    /* Set the brightness to a medium values */
-    lc.setIntensity(i, 15);
-    /* and clear the display */
-    lc.clearDisplay(i);
-  }
-}
-
-void createMatrices() {
-  for (int i = 0; i < DEVICES + 1; i++) {
-    Matrix mat;
-    mat.setAddr(i);
-    matrices.push_back(mat);
-  }
-}
+void createMatrices() { matrixRow = new MatrixSet(DEVICES, LOAD); }
 
 void handleRoot() {
   server.send(200, "text/html",
@@ -90,6 +70,14 @@ void msgReceived() {
   handleRoot();
 }
 
+void pendingMessages() {
+  std::string output;
+  output += "{\"size\": ";
+  output += String(input_data.size()).c_str();
+  output += "}";
+  server.send(200, "text/json", output.c_str());
+}
+
 void instantiateServer() {
   WiFi.begin(ssid.c_str(), password.c_str());
   while (WiFi.status() != WL_CONNECTED) {
@@ -102,51 +90,44 @@ void instantiateServer() {
 
   server.on("/", handleRoot);
   server.on("/SEND_MSG", msgReceived);
+  server.on("/PENDING_MSG", pendingMessages);
   server.begin();
 }
 
 void setup() {
+  SPI.begin();
   Serial.begin(115200);
-  instantiateDisplays();
+  Serial.println("Beginning");
 
   loadFont(font);
 
   createMatrices();
+  matrixRow->setIntensity(1);
 
   instantiateServer();
 
   addToQueue("MSFT +12      ");
+
+  Serial.println("End Setup");
 }
 
 void writeArduinoOnMatrix() {
   // Update the displays
-
-  for (int i = 0; i < DEVICES; i++) {
-    matrices[i].writeToDisplay(&lc);
-  }
+  matrixRow->writeToDisplay();
 
   // The last matrix is a "Phantom" matrix.
   // It's purpose is to load in the data which will
   // be shifted into the real matrices
   // Once it's exmpty, we'll load in the new data
-  if (matrices[DEVICES].isEmpty()) {
+  if (matrixRow->isBufferEmpty()) {
     if (!input_data.empty()) {
       FontData front = input_data.front();
-      matrices[DEVICES].loadValue(front);
+      matrixRow->loadValueEnd(front);
       input_data.pop();
     }
   }
 
-  // Define input and output rows to pass data from one
-  // matrix to the next
-  bool next_in[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-  bool out[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-  for (int i = DEVICES; i >= 0; i--) {
-    matrices[i].shiftleft(next_in, out);
-    for (int j = 0; j < 8; j++) {
-      next_in[j] = out[j];
-    }
-  }
+  matrixRow->shiftLeft();
 
   // Add a delay to slow down scrolling
   delay(delaytime);

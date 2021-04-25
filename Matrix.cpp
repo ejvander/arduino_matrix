@@ -46,12 +46,10 @@ void Matrix::shiftleft(bool row_in[8], bool row_out[8]) {
   mSize = mSize == 0 ? 0 : mSize - 1;
 }
 
-void Matrix::writeToDisplay(LedControl *lc) {
-  for (int row = 0; row < 8; row++) {
-    uint8_t row_val = 0;
-    for (int col = 0; col < 8; col++) {
-      row_val |= mValues[row][col] << (col);
-    }
-    lc->setRow(this->mAddr, (7 - row), row_val);
+byte Matrix::getRow(uint8_t row) {
+  byte row_val = 0;
+  for (int col = 0; col < 8; col++) {
+    row_val |= mValues[row][col] << (col);
   }
+  return row_val;
 }
